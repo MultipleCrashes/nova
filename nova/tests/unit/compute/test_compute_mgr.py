@@ -20,6 +20,7 @@ import time
 from cinderclient import exceptions as cinder_exception
 from cursive import exception as cursive_exception
 from eventlet import event as eventlet_event
+from keystoneauth1 import exceptions as keystone_exception
 import mock
 import netaddr
 from oslo_log import log as logging
@@ -4373,6 +4374,29 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase):
             self.context, instance.uuid)
         mock_delete_instance.assert_called_once_with(
             self.context, instance, bdms)
+
+    @mock.patch('nova.compute.manager.ComputeManager._delete_instance')
+    def test_retry_for_terminate_instance_failure(self, mock_delete_instance):
+        instance = fake_instance.fake_instance_obj(
+            self.context, vm_state=vm_states.ERROR,
+            task_state=task_states.DELETING)
+        mock_delete_instance.side_effect = \
+            keystone_exception.connection.ConnectFailure
+        try:
+            self.compute.terminate_instance(self.context, instance, [])
+            # Three retries as per logic, with backoff time
+            # hence unit test will take time to execute
+        except:
+            self.assertEqual(mock_delete_instance.call_count, 3)
+
+    @mock.patch('nova.compute.manager.ComputeManager._delete_instance')
+    def test_no_retry_for_proper_terminate_instance(self,
+                                                    mock_delete_instance):
+        instance = fake_instance.fake_instance_obj(
+            self.context, vm_state=vm_states.ERROR,
+            task_state=task_states.DELETING)
+        self.compute.terminate_instance(self.context, instance, [])
+        self.assertEqual(mock_delete_instance.call_count, 1)
 
     @mock.patch('nova.compute.utils.notify_about_instance_action')
     @mock.patch.object(nova.compute.manager.ComputeManager,

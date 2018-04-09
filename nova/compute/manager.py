@@ -2551,19 +2551,37 @@ class ComputeManager(manager.Manager):
                     bdms = objects.BlockDeviceMappingList.get_by_instance_uuid(
                         context, instance.uuid)
                     break
-            try:
-                self._delete_instance(context, instance, bdms)
-            except exception.InstanceNotFound:
-                LOG.info("Instance disappeared during terminate",
-                         instance=instance)
-            except Exception:
-                # As we're trying to delete always go to Error if something
-                # goes wrong that _delete_instance can't handle.
-                with excutils.save_and_reraise_exception():
-                    LOG.exception('Setting instance vm_state to ERROR',
-                                  instance=instance)
-                    self._set_instance_obj_error_state(context, instance)
-
+            retry_count = 1
+            max_retries = 3
+            delay_time = 30  # starting delay 30 sec
+            while True:
+                try:
+                    self._delete_instance(context, instance, bdms)
+                except exception.InstanceNotFound:
+                    LOG.info("Instance disappeared during terminate",
+                             instance=instance)
+                except keystone_exception.connection.ConnectFailure:
+                    with excutils.save_and_reraise_exception(
+                                        reraise=False) as sare:
+                        if retry_count < max_retries:  # max retries not done
+                            LOG.info('Retrying _delete_instance after failure '
+                                     'retrying count %s ', retry_count)
+                            time.sleep(delay_time)
+                            delay_time = delay_time * retry_count  # backoff time
+                            retry_count = retry_count + 1
+                            continue
+                        else:
+                            LOG.exception('3 Retryies done')
+                            sare.reraise = True
+                except Exception:
+                    # As we're trying to delete always go to Error if
+                    # something goes wrong that _delete_instance can't handle.
+                    with excutils.save_and_reraise_exception():
+                        LOG.exception('Setting instance vm_state to ERROR',
+                                      instance=instance)
+                        self._set_instance_obj_error_state(context,
+                                                         instance)
+                break     # in case try succeeds, break out of while loop
         do_terminate_instance(instance, bdms)
 
     # NOTE(johannes): This is probably better named power_off_instance
