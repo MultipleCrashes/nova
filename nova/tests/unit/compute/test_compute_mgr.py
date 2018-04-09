@@ -4374,6 +4374,28 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase):
         mock_delete_instance.assert_called_once_with(
             self.context, instance, bdms)
 
+    @mock.patch('nova.compute.manager.ComputeManager._delete_instance')
+    def test_retry_for_terminate_instance_failure(self, mock_delete_instance):
+        instance = fake_instance.fake_instance_obj(
+            self.context, vm_state=vm_states.ERROR,
+            task_state=task_states.DELETING)
+        mock_delete_instance.side_effect = Exception('Oh')
+        try:
+            self.compute.terminate_instance(self.context, instance, [])
+        except Exception:
+            # Three retries as per logic, with backoff time
+            # hence unit test will take time to execute
+            self.assertEqual(mock_delete_instance.call_count, 3)
+
+    @mock.patch('nova.compute.manager.ComputeManager._delete_instance')
+    def test_no_retry_for_proper_terminate_instance(self,
+                                                    mock_delete_instance):
+        instance = fake_instance.fake_instance_obj(
+            self.context, vm_state=vm_states.ERROR,
+            task_state=task_states.DELETING)
+        self.compute.terminate_instance(self.context, instance, [])
+        self.assertEqual(mock_delete_instance.call_count, 1)
+
     @mock.patch('nova.compute.utils.notify_about_instance_action')
     @mock.patch.object(nova.compute.manager.ComputeManager,
                        '_notify_about_instance_usage')
