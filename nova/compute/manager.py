@@ -2567,7 +2567,8 @@ class ComputeManager(manager.Manager):
                             LOG.info('Retrying _delete_instance after failure '
                                      'retrying count %s ', retry_count)
                             time.sleep(delay_time)
-                            delay_time = delay_time * retry_count  # backoff time
+                            # backoff time
+                            delay_time = delay_time * retry_count
                             retry_count = retry_count + 1
                             continue
                         else:
