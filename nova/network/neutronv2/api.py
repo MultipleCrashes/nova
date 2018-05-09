@@ -50,12 +50,12 @@ LOG = logging.getLogger(__name__)
 
 _SESSION = None
 _ADMIN_AUTH = None
+_LIST_PORT_CALL = False
 
 DEFAULT_SECGROUP = 'default'
 BINDING_PROFILE = 'binding:profile'
 BINDING_HOST_ID = 'binding:host_id'
 MIGRATING_ATTR = 'migrating_to'
-
 
 def reset_state():
     global _ADMIN_AUTH
@@ -181,12 +181,16 @@ def get_client(context, admin=False):
         # This should be unwound at some point.
         adap = utils.get_ksa_adapter(
             'network', ksa_auth=auth_plugin, ksa_session=_SESSION)
+        max_retries = 0
+        if _LIST_PORT_CALL:
+            max_retries = 3
         client_args = dict(client_args,
                            service_type=adap.service_type,
                            service_name=adap.service_name,
                            interface=adap.interface,
                            region_name=adap.region_name,
-                           endpoint_override=adap.endpoint_override)
+                           endpoint_override=adap.endpoint_override,
+                           retries=max_retries)
 
     return ClientWrapper(clientv20.Client(**client_args),
                          admin=admin or context.is_admin)
@@ -1250,6 +1254,8 @@ class API(base_api.NetworkAPI):
         """Deallocate all network resources related to the instance."""
         LOG.debug('deallocate_for_instance()', instance=instance)
         search_opts = {'device_id': instance.uuid}
+        # set list port function, called based on which retries will be done.
+        _LIST_PORT_CALL = True
         neutron = get_client(context)
         data = neutron.list_ports(**search_opts)
         ports = [port['id'] for port in data.get('ports', [])]

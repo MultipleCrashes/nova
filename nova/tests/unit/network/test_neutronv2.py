@@ -1710,6 +1710,13 @@ class TestNeutronv2(TestNeutronv2Base):
         self.mox.ReplayAll()
         neutronapi.API().list_ports(self.context, **search_opts)
 
+    def test_list_port_retry(self):
+        search_opts = {'param': 'value'}
+        neutronapi.get_client(mox.IgnoreArg()).AndReturn(self.moxed_client)
+        self.moxed_client.list_ports(**search_opts)
+        self.mox.ReplayAll()
+        neutronapi.API().list_ports(self.context, **search_opts)
+
     def test_show_port(self):
         neutronapi.get_client(mox.IgnoreArg()).AndReturn(self.moxed_client)
         self.moxed_client.show_port('foo').AndReturn(
