@@ -2283,6 +2283,11 @@ class ComputeManager(manager.Manager):
             # exception will be raised by instance.save()
             pass
 
+    @loopingcall.RetryDecorator(max_retry_count=3,
+                            inc_sleep_time=2,
+                            max_sleep_time=12,
+                            exceptions=(
+                                keystone_exception.connection.ConnectFailure,))
     def _try_deallocate_network(self, context, instance,
                                 requested_networks=None):
         try:

@@ -21,6 +21,7 @@ from cursive import exception as cursive_exception
 import ddt
 from eventlet import event as eventlet_event
 from eventlet import timeout as eventlet_timeout
+from keystoneauth1 import exceptions as keystone_exception
 import mock
 import netaddr
 from oslo_log import log as logging
@@ -6055,6 +6056,21 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
             deallocate.assert_called_once_with(
                 self.context, mock.sentinel.instance,
                 requested_networks=requested_networks)
+
+    @mock.patch('nova.compute.manager.ComputeManager._deallocate_network')
+    def test_try_deallocate_network_retry_direct(self,
+                                                 deallocate_network_mock):
+        deallocate_network_mock.side_effect = \
+            keystone_exception.connection.ConnectFailure
+        req_networks = objects.NetworkRequestList(
+            objects=[objects.NetworkRequest(network_id='auto')])
+        instance = mock.MagicMock()
+        context = mock.MagicMock()
+        self.assertRaises(keystone_exception.connection.ConnectFailure,
+                          self.compute._try_deallocate_network,
+                          context, instance, req_networks)
+        # should come to 3 retries and 1 default call , total 4
+        self.assertEqual(deallocate_network_mock.call_count, 4)
 
     @mock.patch('nova.compute.utils.notify_about_instance_create')
     @mock.patch.object(manager.ComputeManager, '_instance_update')
